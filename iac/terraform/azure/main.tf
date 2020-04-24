@@ -1,18 +1,21 @@
 terraform {
-  required_version = ">= 0.11"
+  required_version = ">= 0.12"
 
   backend "azurerm" {}
 }
 
 # Configure the Microsoft Azure Provider
-provider "azurerm" {}
+provider "azurerm" {
+    features {}
+
+}
 
 # Create a resource group if it doesn’t exist
 resource "azurerm_resource_group" "rg" {
   name     = "javademo"
   location = "eastus"
 
-  tags {
+  tags = {
     environment = "Terraform Demo"
   }
 }
@@ -38,7 +41,7 @@ resource "azurerm_public_ip" "lbpip" {
   name                         = "${var.lb_ip_dns_name}-ip"
   location                     = "${azurerm_resource_group.rg.location}"
   resource_group_name          = "${azurerm_resource_group.rg.name}"
-  public_ip_address_allocation = "dynamic"
+  allocation_method            = "Static"
   domain_name_label            = "${var.lb_ip_dns_name}"
 }
 
@@ -96,7 +99,7 @@ resource "azurerm_lb_rule" "lb_rule" {
   backend_address_pool_id        = "${azurerm_lb_backend_address_pool.backend_pool.id}"
   idle_timeout_in_minutes        = 5
   probe_id                       = "${azurerm_lb_probe.lb_probe.id}"
-  depends_on                     = ["azurerm_lb_probe.lb_probe"]
+  depends_on                     = [azurerm_lb_probe.lb_probe]
 }
 
 resource "azurerm_lb_probe" "lb_probe" {
@@ -119,11 +122,25 @@ resource "azurerm_network_interface" "nic" {
     name                                    = "ipconfig${count.index}"
     subnet_id                               = "${azurerm_subnet.subnet.id}"
     private_ip_address_allocation           = "Dynamic"
-    load_balancer_backend_address_pools_ids = ["${azurerm_lb_backend_address_pool.backend_pool.id}"]
-    load_balancer_inbound_nat_rules_ids     = ["${element(azurerm_lb_nat_rule.tcp.*.id, count.index)}"]
+    
   }
 }
 
+resource "azurerm_network_interface_nat_rule_association" "terrademo" {
+  network_interface_id  = azurerm_network_interface.nic[count.index].id
+  ip_configuration_name = "ipconfig${count.index}"
+  nat_rule_id           = azurerm_lb_nat_rule.tcp[count.index].id
+  count                 = 2
+
+
+}
+
+resource "azurerm_network_interface_backend_address_pool_association" "terrademo" {
+  network_interface_id    = azurerm_network_interface.nic[count.index].id
+  ip_configuration_name   = "ipconfig${count.index}"
+  backend_address_pool_id = azurerm_lb_backend_address_pool.backend_pool.id
+  count                   = 2
+}
 # Create virtual machine
 resource "azurerm_virtual_machine" "vm" {
   name                  = "vm${count.index}"
@@ -157,11 +174,11 @@ resource "azurerm_virtual_machine" "vm" {
 
     ssh_keys {
       path     = "/home/azureuser/.ssh/authorized_keys"
-      key_data = "${var.ssh_key}"
+      key_data = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDdEXt5wSO1sxsq8Njir5lWZuDHhELv+5eEN/ISDi198ATcCc38eGwBUYwoHyXij7SB4Y6yn/qSmBbgyK6Yvu5wG+BIJpQSm8t4sL9ob4yirVl9FE1SeEIy79/fVUQzpS89Ct+EDq99pH0fw5Ve4JwaVjoKRACmOQq2naUgoaSDbk29fSgwudvJjLvsiaYF9wLpkCWYZK0QjXRd/4OnpwSGlP4sBd/zBRWYe0C88FdP6alttI3BTU3ZXKL5smLC+hcivIlPnkFMwEVW/+foKuL58nHoK7aBRBxLpLmNYLtRL9gzGNjGDzjO/Fm8SebSkFDEB8XWJyGh3iT5tGk5+Ktg4N1AlhoJnZXVPDfBxiBIfZqZ1MbFlLMDwAtb0XAkMZkO8LrgC/fZ9bXf2lhEeaAz8Vybh2JCvn0ZYMXtDm+U8rZ/TUcApw2W9BxvWNXWG2C3Uhj54dkliy6LExQUSu8go6eVzy8wyHhwk8fgfNop8MsglOieMA3JUOcKn3LJhPZk1qJ2E4BkHWqQYhd7dJXvICKxRy0sHNykSNORuYL+AeazUjv9WwCm4q1M526euWPPA+iFiiiHVkB/r9Y/fZCCd9/P1hdP065gTFhAZixwym1bvc9/r1+tefnEAL408hmN6bqIUbo/Ir0DdEYtAKs937F4yEIaHwCQHvk1YKEWZw== subbiah.k@kaats.in"
     }
   }
 
-  tags {
+  tags = {
     environment = "Terraform Demo"
   }
 }
